@@ -1,123 +1,70 @@
-use crossterm::{
-    cursor,
-    event::{self, Event, KeyCode, KeyEvent},
-    execute, queue, style,
-    terminal::{self, ClearType},
-    Result,
-};
-use reqwest::blocking::{Client, ClientBuilder};
-use serde::{Deserialize, Serialize};
-use std::io::{stdout, Write};
+use clap::{Parser, Subcommand};
+use std::{fs::File, io::Write, path::PathBuf};
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ArtistReponse {
-    artists: Vec<Artist>,
+mod data;
+
+lazy_static::lazy_static! {
+    static ref DEFAULT_DIRECTORY: PathBuf = std::env::current_dir().expect("Failed to get current working directory");
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Artist {
-    id: String,
-    #[serde(rename = "sort-name")]
-    name: String,
-    area: Area,
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Fetches a release cover based on the parameters
+    Fetch {
+        /// Artist to search for
+        artist: String,
+        /// Release name to search for
+        release: String,
+        /// File to push to output to, defaults to the current working directory
+        #[clap(short, long)]
+        target_directory: Option<PathBuf>,
+    },
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Area {
-    name: String,
+#[derive(Debug, Parser)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
 }
 
-fn client() -> Client {
-    ClientBuilder::new().build().unwrap()
-}
-
-fn artist<S: ToString>(name: S) -> Vec<Artist> {
-    let response = client()
-        .get(format!(
-            "http://musicbrainz.org/ws/2/artist/?query=artist:{}",
-            name.to_string()
-        ))
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (X11; Linux x86_64; rv:103.0) Gecko/20100101 Firefox/103.0",
-        )
-        .header("Accept", "application/json")
-        .send()
-        .unwrap();
-
-    response.json::<ArtistReponse>().unwrap().artists
-}
-
-fn read_char() -> Result<KeyTypes> {
-    loop {
-        break match event::read()? {
-            Event::Key(KeyEvent {
-                code: KeyCode::Up, ..
-            }) => Ok(KeyTypes::ArrowUp),
-            Event::Key(KeyEvent {
-                code: KeyCode::Down,
-                ..
-            }) => Ok(KeyTypes::ArrowDown),
-            Event::Key(KeyEvent {
-                code: KeyCode::Char(c),
-                ..
-            }) => Ok(KeyTypes::Char(c)),
-            _ => continue,
-        };
+fn main() {
+    match Cli::parse().command {
+        Commands::Fetch {
+            artist,
+            release,
+            target_directory,
+        } => fetch(FetchContext {
+            artist,
+            release,
+            target_directory: {
+                let mut target_path = target_directory.unwrap_or(DEFAULT_DIRECTORY.clone());
+                target_path.push("cover.jpg");
+                target_path
+            },
+        }),
     }
 }
 
-enum KeyTypes {
-    ArrowUp,
-    ArrowDown,
-    Char(char),
+struct FetchContext {
+    artist: String,
+    release: String,
+    target_directory: PathBuf,
 }
 
-fn main() -> Result<()> {
-    let mut w = stdout();
-    execute!(w, terminal::EnterAlternateScreen)?;
+fn fetch(context: FetchContext) {
+    let artist = data::artist::artist(context.artist)
+        .expect("Request error occured while fetching artist")
+        .expect("Failed to find artist");
 
-    terminal::enable_raw_mode()?;
+    let release_group = data::release_group::release_group(artist.id(), context.release)
+        .expect("Request error occured while fetching release group")
+        .expect("Failed to find release group");
 
-    let mut cursor_pos = 0;
-    let artists = artist("Rammstein");
+    let cover = data::cover::cover(release_group.id())
+        .expect("Request error occured while fetching cover")
+        .expect("Failed to get cover");
 
-    loop {
-        queue!(
-            w,
-            style::ResetColor,
-            terminal::Clear(ClearType::All),
-            cursor::MoveTo(cursor_pos, 0)
-        )?;
-
-        for artist in artists.clone() {
-            queue!(
-                w,
-                style::Print(format!("{} - {}", artist.name, artist.area.name)),
-                cursor::MoveToNextLine(1)
-            )?;
-        }
-
-        w.flush()?;
-
-        match read_char()? {
-            KeyTypes::ArrowUp | KeyTypes::Char('k') => {
-                cursor_pos -= 1;
-            }
-            KeyTypes::ArrowDown | KeyTypes::Char('j') => {
-                cursor_pos += 1;
-            }
-            KeyTypes::Char('q') => break,
-            _ => {}
-        };
-    }
-
-    execute!(
-        w,
-        style::ResetColor,
-        cursor::Show,
-        terminal::LeaveAlternateScreen
-    )?;
-
-    terminal::disable_raw_mode()
+    let mut file = File::create(context.target_directory).expect("Failed to create output file");
+    file.write_all(&cover)
+        .expect("Failed to write to output file");
 }
