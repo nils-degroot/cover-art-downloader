@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand};
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{env, fs::File, io::Write, path::PathBuf};
 
 mod data;
 
 lazy_static::lazy_static! {
-    static ref DEFAULT_DIRECTORY: PathBuf = std::env::current_dir().expect("Failed to get current working directory");
+    static ref DEFAULT_DIRECTORY: PathBuf = env::current_dir().expect("Failed to get current working directory");
 }
+
+const DEFAULT_FILENAME: &'_ str = "cover.jpg";
 
 #[derive(Debug, Subcommand)]
 enum Commands {
@@ -18,6 +20,8 @@ enum Commands {
         /// File to push to output to, defaults to the current working directory
         #[clap(short, long)]
         target_directory: Option<PathBuf>,
+        #[clap(short, long)]
+        filename: Option<String>,
     },
 }
 
@@ -33,12 +37,13 @@ fn main() {
             artist,
             release,
             target_directory,
+            filename,
         } => fetch(FetchContext {
             artist,
             release,
             target_directory: {
                 let mut target_path = target_directory.unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
-                target_path.push("cover.jpg");
+                target_path.push(filename.unwrap_or(DEFAULT_FILENAME.to_string()));
                 target_path
             },
         }),
@@ -64,7 +69,8 @@ fn fetch(context: FetchContext) {
         .expect("Request error occured while fetching cover")
         .expect("Failed to get cover");
 
-    let mut file = File::create(context.target_directory).expect("Failed to create output file");
-    file.write_all(&cover)
+    File::create(context.target_directory)
+        .expect("Failed to create output file")
+        .write_all(&cover)
         .expect("Failed to write to output file");
 }
