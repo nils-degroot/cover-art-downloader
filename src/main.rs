@@ -37,7 +37,7 @@ fn main() {
             artist,
             release,
             target_directory: {
-                let mut target_path = target_directory.unwrap_or(DEFAULT_DIRECTORY.clone());
+                let mut target_path = target_directory.unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
                 target_path.push("cover.jpg");
                 target_path
             },

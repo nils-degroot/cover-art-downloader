@@ -24,9 +24,9 @@ lazy_static::lazy_static! {
     pub static ref CLIENT: Client = ClientBuilder::new().build().expect("Could not initialize TLS backend");
 }
 
-pub const MUSICBRAINZ_BASE_URL: &'static str = "http://musicbrainz.org/ws/2";
+pub const MUSICBRAINZ_BASE_URL: &'_ str = "http://musicbrainz.org/ws/2";
 
-pub const COVERARCHIVE_BASE_URL: &'static str = "http://coverartarchive.org";
+pub const COVERARCHIVE_BASE_URL: &'_ str = "http://coverartarchive.org";
 
 type RequestResult<T> = Result<T, RequestFailures>;
 
