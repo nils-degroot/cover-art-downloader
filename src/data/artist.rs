@@ -24,6 +24,10 @@ impl Artist {
     pub fn id(&self) -> String {
         self.id.clone()
     }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
 }
 
 pub fn artists<S: ToString>(name: S) -> RequestResult<Vec<Artist>> {

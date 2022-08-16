@@ -10,14 +10,25 @@ pub struct ReleaseGroupReponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct ReleaseGroup {
     id: String,
     title: String,
+    #[serde(rename = "primary-type")]
+    release_type: String,
 }
 
 impl ReleaseGroup {
     pub fn id(&self) -> String {
         self.id.clone()
+    }
+
+    pub fn title(&self) -> String {
+        self.title.clone()
+    }
+
+    pub fn release_type(&self) -> String {
+        self.release_type.clone()
     }
 }
 

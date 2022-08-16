@@ -1,5 +1,12 @@
 use clap::{Parser, Subcommand};
-use std::{env, fs::File, io::Write, path::PathBuf};
+use data::{artist::artists, release_group::release_groups};
+use std::{
+    collections::HashMap,
+    env,
+    fs::File,
+    io::{stdin, Write},
+    path::PathBuf,
+};
 
 mod data;
 
@@ -57,13 +64,48 @@ struct FetchContext {
 }
 
 fn fetch(context: FetchContext) {
-    let artist = data::artist::artist(context.artist)
-        .expect("Request error occured while fetching artist")
-        .expect("Failed to find artist");
+    let artists = artists(context.artist).unwrap();
+    let artist = match artists.len() {
+        0 => panic!("Failed to find artist"),
+        1 => artists.first().unwrap(),
+        _ => {
+            let artist_map = artists
+                .iter()
+                .map(|artist| (artist.id(), artist.name()))
+                .collect::<HashMap<_, _>>();
 
-    let release_group = data::release_group::release_group(artist.id(), context.release)
-        .expect("Request error occured while fetching release group")
-        .expect("Failed to find release group");
+            println!("Select a artist");
+            let selected = select_item(artist_map);
+            artists
+                .iter()
+                .find(|artist| artist.id() == selected)
+                .unwrap()
+        }
+    };
+
+    let release_groups = release_groups(artist.id(), context.release).unwrap();
+    let release_group = match release_groups.len() {
+        0 => panic!("Failed to find release group"),
+        1 => release_groups.first().unwrap(),
+        _ => {
+            let release_group_map = release_groups
+                .iter()
+                .map(|group| {
+                    (
+                        group.id(),
+                        format!("{} - {}", group.release_type(), group.title()),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            println!("Select a release");
+            let selected = select_item(release_group_map);
+            release_groups
+                .iter()
+                .find(|group| group.id() == selected)
+                .unwrap()
+        }
+    };
 
     let cover = data::cover::cover(release_group.id())
         .expect("Request error occured while fetching cover")
@@ -73,4 +115,31 @@ fn fetch(context: FetchContext) {
         .expect("Failed to create output file")
         .write_all(&cover)
         .expect("Failed to write to output file");
+}
+
+fn select_item(options: HashMap<String, String>) -> String {
+    let options = options.iter().enumerate().collect::<Vec<_>>();
+
+    loop {
+        for (index, (_, text)) in &options {
+            println!("{} - {}", index + 1, text);
+        }
+
+        let mut buffer = String::new();
+        stdin().read_line(&mut buffer).unwrap();
+
+        let selected = match buffer.trim().parse::<usize>() {
+            Ok(i) => i - 1,
+            Err(_) => {
+                println!("Invalid input\n");
+                continue;
+            }
+        };
+
+        if (0..options.len()).contains(&selected) {
+            break options.get(selected).unwrap().1 .0.clone();
+        }
+
+        println!("Invalid index selected\n");
+    }
 }
