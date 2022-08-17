@@ -15,8 +15,6 @@ lazy_static::lazy_static! {
     static ref DEFAULT_DIRECTORY: PathBuf = env::current_dir().expect("Failed to get current working directory");
 }
 
-const DEFAULT_FILENAME: &'_ str = "cover.jpg";
-
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Fetches a release cover based on the parameters
@@ -28,9 +26,9 @@ enum Commands {
         /// File to push to output to, defaults to the current working directory
         #[clap(short, long)]
         target_directory: Option<PathBuf>,
-        /// Filename to output to, default to `cover.jpg`
-        #[clap(short, long)]
-        filename: Option<String>,
+        /// Filename to output to
+        #[clap(short, long, default_value_t = String::from("cover.jpg"))]
+        filename: String,
     },
 }
 
@@ -41,7 +39,7 @@ struct Cli {
 }
 
 fn main() {
-    let result = match Cli::parse().command {
+    match Cli::parse().command {
         Commands::Fetch {
             artist,
             release,
@@ -52,14 +50,10 @@ fn main() {
             release,
             target_directory: {
                 let mut target_path = target_directory.unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
-                target_path.push(filename.unwrap_or_else(|| DEFAULT_FILENAME.to_string()));
+                target_path.push(filename);
                 target_path
             },
         }),
-    };
-
-    if let Err(reason) = result {
-        eprintln!("{}", reason);
     }
 }
 
@@ -69,26 +63,28 @@ struct FetchContext {
     target_directory: PathBuf,
 }
 
-fn fetch(context: FetchContext) -> Result<(), String> {
-    let artists =
-        artists(context.artist).map_err(|_| "Request error occured while fetching artist")?;
-    let artist = handle_multiple(artists, "artist".to_string()).ok_or("Failed to find artist")?;
+fn fetch(context: FetchContext) {
+    let artist = handle_multiple(
+        artists(context.artist).expect("Request error occured while fetching artist"),
+        "artist".to_string(),
+    )
+    .expect("Failed to find artist");
 
-    let releases = release_groups(artist.id(), context.release)
-        .map_err(|_| "Request eror occured while fetching release group")?;
-    let release = handle_multiple(releases, "release group".to_string())
-        .ok_or("Failed to find a release group")?;
+    let release = handle_multiple(
+        release_groups(artist.id(), context.release)
+            .expect("Request eror occured while fetching release group"),
+        "release group".to_string(),
+    )
+    .expect("Failed to find a release group");
 
     let cover = data::cover::cover(release.id())
-        .map_err(|_| "Request error occured while fetching cover")?
-        .ok_or("Failed to get cover")?;
+        .expect("Request error occured while fetching cover")
+        .expect("Failed to get cover");
 
     File::create(context.target_directory)
-        .map_err(|_| "Failed to create output file")?
+        .expect("Failed to create output file")
         .write_all(&cover)
-        .map_err(|_| "Failed to write to output file")?;
-
-    Ok(())
+        .expect("Failed to write to output file");
 }
 
 fn handle_multiple<T>(options: Vec<T>, type_name: String) -> Option<T>
