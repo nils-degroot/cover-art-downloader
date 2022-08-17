@@ -48,7 +48,3 @@ pub fn artists<S: ToString>(name: S) -> RequestResult<Vec<Artist>> {
         .map_err(|_| RequestFailures::FailedToSerialize)?
         .artists)
 }
-
-pub fn artist<S: ToString>(name: S) -> RequestResult<Option<Artist>> {
-    Ok(artists(name)?.first().cloned())
-}

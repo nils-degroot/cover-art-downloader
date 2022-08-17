@@ -51,7 +51,3 @@ pub fn release_groups<S: ToString>(artist_id: S, name: S) -> RequestResult<Vec<R
         .map_err(|_| RequestFailures::FailedToSerialize)?
         .release_groups)
 }
-
-pub fn release_group<S: ToString>(artist_id: S, name: S) -> RequestResult<Option<ReleaseGroup>> {
-    Ok(release_groups(artist_id, name)?.first().cloned())
-}

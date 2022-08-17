@@ -1,14 +1,15 @@
 use clap::{Parser, Subcommand};
 use data::{artist::artists, release_group::release_groups};
+use ext::*;
 use std::{
-    collections::HashMap,
     env,
     fs::File,
-    io::{stdin, Write},
+    io::{stdin, stdout, Write},
     path::PathBuf,
 };
 
 mod data;
+mod ext;
 
 lazy_static::lazy_static! {
     static ref DEFAULT_DIRECTORY: PathBuf = env::current_dir().expect("Failed to get current working directory");
@@ -27,6 +28,7 @@ enum Commands {
         /// File to push to output to, defaults to the current working directory
         #[clap(short, long)]
         target_directory: Option<PathBuf>,
+        /// Filename to output to, default to `cover.jpg`
         #[clap(short, long)]
         filename: Option<String>,
     },
@@ -39,7 +41,7 @@ struct Cli {
 }
 
 fn main() {
-    match Cli::parse().command {
+    let result = match Cli::parse().command {
         Commands::Fetch {
             artist,
             release,
@@ -50,10 +52,14 @@ fn main() {
             release,
             target_directory: {
                 let mut target_path = target_directory.unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
-                target_path.push(filename.unwrap_or(DEFAULT_FILENAME.to_string()));
+                target_path.push(filename.unwrap_or_else(|| DEFAULT_FILENAME.to_string()));
                 target_path
             },
         }),
+    };
+
+    if let Err(reason) = result {
+        eprintln!("{}", reason);
     }
 }
 
@@ -63,68 +69,55 @@ struct FetchContext {
     target_directory: PathBuf,
 }
 
-fn fetch(context: FetchContext) {
-    let artists = artists(context.artist).unwrap();
-    let artist = match artists.len() {
-        0 => panic!("Failed to find artist"),
-        1 => artists.first().unwrap(),
-        _ => {
-            let artist_map = artists
-                .iter()
-                .map(|artist| (artist.id(), artist.name()))
-                .collect::<HashMap<_, _>>();
+fn fetch(context: FetchContext) -> Result<(), String> {
+    let artists =
+        artists(context.artist).map_err(|_| "Request error occured while fetching artist")?;
+    let artist = handle_multiple(artists, "artist".to_string()).ok_or("Failed to find artist")?;
 
-            println!("Select a artist");
-            let selected = select_item(artist_map);
-            artists
-                .iter()
-                .find(|artist| artist.id() == selected)
-                .unwrap()
-        }
-    };
+    let releases = release_groups(artist.id(), context.release)
+        .map_err(|_| "Request eror occured while fetching release group")?;
+    let release = handle_multiple(releases, "release group".to_string())
+        .ok_or("Failed to find a release group")?;
 
-    let release_groups = release_groups(artist.id(), context.release).unwrap();
-    let release_group = match release_groups.len() {
-        0 => panic!("Failed to find release group"),
-        1 => release_groups.first().unwrap(),
-        _ => {
-            let release_group_map = release_groups
-                .iter()
-                .map(|group| {
-                    (
-                        group.id(),
-                        format!("{} - {}", group.release_type(), group.title()),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
-
-            println!("Select a release");
-            let selected = select_item(release_group_map);
-            release_groups
-                .iter()
-                .find(|group| group.id() == selected)
-                .unwrap()
-        }
-    };
-
-    let cover = data::cover::cover(release_group.id())
-        .expect("Request error occured while fetching cover")
-        .expect("Failed to get cover");
+    let cover = data::cover::cover(release.id())
+        .map_err(|_| "Request error occured while fetching cover")?
+        .ok_or("Failed to get cover")?;
 
     File::create(context.target_directory)
-        .expect("Failed to create output file")
+        .map_err(|_| "Failed to create output file")?
         .write_all(&cover)
-        .expect("Failed to write to output file");
+        .map_err(|_| "Failed to write to output file")?;
+
+    Ok(())
 }
 
-fn select_item(options: HashMap<String, String>) -> String {
+fn handle_multiple<T>(options: Vec<T>, type_name: String) -> Option<T>
+where
+    T: Sized + Clone + Id + ReadableForm,
+{
+    match &options[..] {
+        [] => None,
+        [option] => Some(option).cloned(),
+        _ => {
+            println!("Select a {}", type_name);
+            Some(select_item(options))
+        }
+    }
+}
+
+fn select_item<T>(options: Vec<T>) -> T
+where
+    T: Clone + ReadableForm,
+{
     let options = options.iter().enumerate().collect::<Vec<_>>();
 
     loop {
-        for (index, (_, text)) in &options {
-            println!("{} - {}", index + 1, text);
+        for (index, option) in &options {
+            println!("{} - {}", index + 1, option.readable_from());
         }
 
+        print!("\n >> ");
+        stdout().flush().unwrap();
         let mut buffer = String::new();
         stdin().read_line(&mut buffer).unwrap();
 
@@ -137,7 +130,7 @@ fn select_item(options: HashMap<String, String>) -> String {
         };
 
         if (0..options.len()).contains(&selected) {
-            break options.get(selected).unwrap().1 .0.clone();
+            break options.get(selected).unwrap().1.clone();
         }
 
         println!("Invalid index selected\n");
