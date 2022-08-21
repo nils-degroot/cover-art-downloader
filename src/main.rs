@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use data::{artist::artists, release_group::release_groups};
 use ext::*;
 use std::{
@@ -15,46 +15,39 @@ lazy_static::lazy_static! {
     static ref DEFAULT_DIRECTORY: PathBuf = env::current_dir().expect("Failed to get current working directory");
 }
 
-#[derive(Debug, Subcommand)]
-enum Commands {
-    /// Fetches a release cover based on the parameters
-    Fetch {
-        /// Artist to search for
-        artist: String,
-        /// Release name to search for
-        release: String,
-        /// File to push to output to, defaults to the current working directory
-        #[clap(short, long)]
-        target_directory: Option<PathBuf>,
-        /// Filename to output to
-        #[clap(short, long, default_value_t = String::from("cover.jpg"))]
-        filename: String,
-    },
-}
-
 #[derive(Debug, Parser)]
 struct Cli {
-    #[clap(subcommand)]
-    command: Commands,
+    /// Artist to search for
+    artist: String,
+    /// Release name to search for
+    release: String,
+    /// File to push to output to, defaults to the current working directory
+    #[clap(short, long)]
+    target_directory: Option<PathBuf>,
+    /// Filename to output to
+    #[clap(short, long, default_value_t = String::from("cover.jpg"))]
+    filename: String,
+}
+
+impl Into<FetchContext> for Cli {
+    fn into(self) -> FetchContext {
+        FetchContext {
+            artist: self.artist,
+            release: self.release,
+            target_directory: {
+                let mut target_path = self
+                    .target_directory
+                    .unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
+                target_path.push(self.filename);
+                target_path
+            },
+        }
+    }
 }
 
 fn main() {
-    match Cli::parse().command {
-        Commands::Fetch {
-            artist,
-            release,
-            target_directory,
-            filename,
-        } => fetch(FetchContext {
-            artist,
-            release,
-            target_directory: {
-                let mut target_path = target_directory.unwrap_or_else(|| DEFAULT_DIRECTORY.clone());
-                target_path.push(filename);
-                target_path
-            },
-        }),
-    }
+    let cli = Cli::parse();
+    fetch(cli.into());
 }
 
 struct FetchContext {

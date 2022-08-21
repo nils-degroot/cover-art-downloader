@@ -19,12 +19,19 @@ sudo ln -s $PWD/target/release/cover-art-fetcher /usr/bin
 cover-art-fetcher 
 
 USAGE:
-    cover-art-fetcher <SUBCOMMAND>
+    cover-art-fetcher [OPTIONS] <ARTIST> <RELEASE>
+
+ARGS:
+    <ARTIST>     Artist to search for
+    <RELEASE>    Release name to search for
 
 OPTIONS:
-    -h, --help    Print help information
+    -f, --filename <FILENAME>
+            Filename to output to [default: cover.jpg]
 
-SUBCOMMANDS:
-    fetch    Fetches a release cover based on the parameters
-    help     Print this message or the help of the given subcommand(s)
+    -h, --help
+            Print help information
+
+    -t, --target-directory <TARGET_DIRECTORY>
+            File to push to output to, defaults to the current working directory
 ```
